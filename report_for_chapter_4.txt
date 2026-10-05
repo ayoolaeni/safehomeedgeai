@@ -1,0 +1,208 @@
+SAFEHOME EDGE AI - REPORT FOR CHAPTER 4 (IMPLEMENTATION AND TESTING)
+Date of testing: 23 September to 5 October 2026
+Written for: the student writing Chapter 4, and the examiners who will read it.
+
+
+1. WHAT WAS BUILT
+-----------------
+SafeHome Edge AI is a smart lamp controller. An ESP32 microcontroller reads
+a motion sensor (PIR) and a light sensor (LDR), decides locally whether the
+lamp should be on, and switches the lamp through a relay. A phone app
+(Flutter, Android) and a Windows laptop app show the state and send
+commands. The devices talk over MQTT, using a Mosquitto broker that runs on
+the laptop. No cloud service is used.
+
+The system has two decision rules:
+  - Dark and motion detected while the lamp is off  -> propose LIGHT_ON.
+  - No motion for the absence timeout while the lamp is on -> propose LIGHT_OFF.
+Each proposal carries a confidence level, HIGH or LOW.
+
+Operating modes:
+  - MANUAL: the user controls the lamp directly. The lamp always boots in MANUAL.
+  - ASSISTED: the system proposes, and the user approves or declines.
+  - AUTONOMOUS: the system acts on its own, but only once the graduation
+    engine has earned it (level S5). Before that, it keeps asking.
+
+
+2. SAFETY MECHANISMS (AGENT_BUILD_SPEC.md section 4.4)
+-------------------------------------------------------
+  1. Action whitelist: only LIGHT_ON and LIGHT_OFF are accepted.
+  2. Confidence gate: LOW-confidence proposals are never acted on automatically.
+  3. Autonomy switch: AUTONOMOUS has no effect until S5 is reached.
+  4. Manual override: a manual command always wins.
+  5. Fail-safe boot: on every start the relay is forced OFF and the mode is
+     forced to MANUAL.
+  6. Tamper-evident log: every event gets a sequence number and a timestamp.
+  7. Local escalation: when the system is unsure, it asks the user. Timed-out
+     proposals are dropped, and the lamp keeps its current state.
+
+
+3. GRADUATION ENGINE (LEVELS S1 TO S5)
+----------------------------------------
+  S1 THRIFTOGENTIC   baseline, always asks
+  S2 Shadow rehearsal
+  S3 Escalation tuning (LOW-confidence proposals escalated correctly)
+  S4 Hazard suite and canary
+  S5 THRIFTONOMOUS   autonomy active
+
+Thresholds, taken from the dissertation:
+  - At least 100 proposals before promotion.
+  - At least 90% approval.
+  - Demotion to S1 if the approval rate over the last 50 outcomes falls
+    below 85%, or if an override rate exceeds 20%.
+  - Immediate demotion to S1 on any sensor fault.
+  - A canary period (48 hours in the real design). For testing, FAST_TEST_MODE
+    shortens it to 2 minutes and the absence timeout to 30 seconds. This is
+    shown on the device at boot.
+  - The hazard suite must be marked passed by the user (typing H in the serial
+    monitor) before S5 can be reached.
+
+Graduation state is stored in the ESP32's flash memory, so it survives power
+cuts and restarts. The mode is not stored and always resets to MANUAL.
+
+
+4. DEVIATIONS FROM THE SPECIFICATION, AND WHY
+----------------------------------------------
+  - LDR module with digital output only (no analogue pin). The firmware reads
+    the digital pin, so the "60 identical readings" stuck-sensor check is
+    disabled. HIGH confidence needs the digital reading to stay stable for
+    2 seconds. Test HZ4 therefore cannot be demonstrated on this hardware.
+  - The LDR module's power pin is driven from GPIO32, because the breadboard
+    had no free 3.3 V socket.
+  - The lamp module has a separate enable pin (GPIO33). It is driven together
+    with the relay, as a second, independent cutoff.
+  - Minimum Android version is 24, not the 21 in the spec. The Flutter build
+    tooling rewrites any lower value to 24.
+  - The broker is found by its laptop name over mDNS, with an IP address as a
+    fallback.
+  - The motion sensor's input is pulled HIGH when disconnected (see section 6,
+    finding 2).
+  - Wi-Fi setup and network switching were added (not in the original spec),
+    so the device can be configured by a non-technical user (see section 7).
+
+
+5. TEST RESULTS
+----------------
+Core functionality (TESTING.md, TS1-TS9)
+  TS1  Manual buttons            Not re-recorded in this session. Confirm
+                                 before submission.
+  TS2  Voice command             Not re-recorded in this session. Confirm
+                                 before submission.
+  TS3  Proposal appears          Not re-recorded in this session. Confirm
+                                 before submission.
+  TS4  Approve                   Not re-recorded in this session. Confirm
+                                 before submission.
+  TS5  Decline                   Not re-recorded in this session. Confirm
+                                 before submission.
+  TS6  No false proposal         Not re-recorded in this session. Confirm
+                                 before submission.
+  TS7  Autonomy not yet earned   PASSED. The banner showed "Not yet earned"
+                                 and the system kept asking.
+  TS8  Autonomous action         PASSED. In AUTONOMOUS at S5, with the light
+                                 covered and motion, the lamp turned on by
+                                 itself. No card appeared. The lamp's
+                                 proposal counter also rose by 2, which is the
+                                 device's own record of the automatic
+                                 decision.
+  TS9  Autonomous absence        PASSED. With the lamp on and no motion, it
+                                 turned off by itself after the absence
+                                 timeout.
+
+Hazard and safety tests (TESTING.md, HZ1-HZ6)
+  HZ1  Fail-safe boot            PASSED. Lamp was ON, power was cut and
+                                 restored. On restart the lamp was OFF, the mode
+                                 was MANUAL, and a BOOT entry was logged.
+  HZ2  Works with no Wi-Fi or    PASSED. Broker stopped in ASSISTED mode. The
+       broker                    board still sensed, beeped once, and logged
+                                 an escalation. The app showed DISCONNECTED.
+                                 After the broker restarted, the app reconnected.
+  HZ3  PIR disconnected          PASSED on the second attempt. First attempt
+                                 FAILED: unplugging the wire did not trigger
+                                 the fault (see section 6, finding 1). After the
+                                 pull-up change, unplugging the motion wire
+                                 produced a FAULT ("PIR stuck HIGH for over 10
+                                 minutes (likely disconnected)"), then a
+                                 DEMOTION to S1. Level went from S4 to S1.
+  HZ4  LDR stuck                 NOT TESTED. Not demonstrable on the DO-only
+                                 module (documented limitation).
+  HZ5  Non-whitelisted command   PASSED. FAN_ON sent to home/light/cmd was
+                                 rejected and logged as REJECTION. The lamp
+                                 stayed OFF.
+  HZ6  Demotion on repeated      PASSED. At S4, repeated declines lowered the
+       declines                  rate to 84% over the last 50. The system
+                                 demoted to S1 with the reason logged.
+
+Hazard suite marking
+  After HZ1, HZ2, HZ3, HZ5 and HZ6 passed, the user typed H in the serial
+  monitor. The board confirmed: "Hazard suite marked PASSED."
+
+Graduation progress observed in the field
+  - S1 to S4 was reached through real proposals, including LOW-confidence
+    ones that were correctly escalated.
+  - S4 to S5 was reached after the 2-minute canary, once the hazard suite was
+    marked passed.
+  - The approval rate stayed at about 90%, the required threshold.
+
+
+6. ISSUES FOUND DURING TESTING, AND THEIR FIXES
+------------------------------------------------
+Finding 1: the motion sensor fault was never detected when the sensor was
+unplugged. The firmware only detected a sensor stuck HIGH for 10 minutes. An
+unplugged wire floats LOW or random, so it looked like "no motion".
+  Fix: the PIR input is set to INPUT_PULLUP. An unplugged input now reads
+  HIGH, and the existing 10-minute check reports the fault.
+
+Finding 2: after a sensor fault, the lamp stopped proposing altogether until
+restarted. The fault flag was set but never cleared, even after the sensor
+came back.
+  Fix: the flag is cleared when the sensor reads LOW again. The demotion stays
+  in place, so the lamp still has to earn its level back.
+  Status: applied and flashed. Not yet re-tested with a full HZ3 run.
+
+Finding 3: after a Wi-Fi password mistake, the board stayed in an endless
+connection retry loop, with no way back to the setup page.
+  Fix: if the board cannot join Wi-Fi within 3 minutes of starting, it forgets
+  the saved network and opens the setup page again.
+
+
+7. WI-FI SETUP AND REMOTE CONTROL (ADDED FEATURES)
+---------------------------------------------------
+  - First setup: a board with no saved network creates its own hotspot,
+    "SafeHome-Setup". The user connects a phone, opens a setup page, picks
+    the home Wi-Fi, and enters the password, the broker address, and the
+    broker login. The board saves these and restarts.
+  - Changing the network later: the app lists the networks the board can see.
+    The change is allowed only in MANUAL mode. The board keeps the old network
+    on probation for 60 seconds, and returns to it if it cannot reach the
+    broker.
+  - Broker login: Mosquitto can require a username and password. The
+    configuration file for this is in the broker folder.
+  - Voice control: a hold-to-speak button on the phone. Speech is converted to
+    text on the phone, and simple rules map it to LIGHT_ON or LIGHT_OFF.
+    Negatives ("don't turn on the light"), questions, and sentences containing
+    both on and off do nothing. Covered by 25 automated tests (all passing).
+
+
+8. LIMITATIONS
+---------------
+  - Wi-Fi passwords and MQTT messages travel without encryption. The Wi-Fi
+    password is stored unencrypted in the board's flash memory. This is
+    acceptable for a prototype, but not for a product.
+  - The broker must stay on, on the same network as the phone and the board.
+  - FAST_TEST_MODE is ON, so the 2-minute canary and 30-second absence timeout
+    are testing values, not the real 48-hour and 30-minute values.
+  - Only a digital light sensor was used, so HZ4 could not be shown.
+  - Voice recognition depends on the phone's speech service. It does not work
+    on the Windows laptop app.
+  - The AI component mentioned in the original plan (a small model) is not
+    yet implemented. Voice uses the rule-based matching above.
+
+
+9. EVIDENCE TO ATTACH
+----------------------
+  - Screenshots of the app for each test (save in an "evidence" folder).
+  - The serial monitor output, showing the boot messages, the hazard suite
+    being marked passed, and the FAULT and DEMOTION lines.
+  - A text record of broker messages during HZ5 (the REJECTION entry).
+  - A photograph of the lamp and the wiring during HZ1 and HZ3.
+  - The TESTING.md checklist, ticked off as each test is completed.

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SafeHome - install the lamp software</title>
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 16px; background: #f4f6f8; color: #222; line-height: 1.5; }
+    main { max-width: 640px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 10px; }
+    h1 { font-size: 24px; margin-top: 0; }
+    h2 { font-size: 18px; margin-top: 24px; }
+    ol li { margin-bottom: 8px; }
+    .big { margin: 16px 0; }
+    .warn { background: #fff4e5; border-left: 4px solid #f5a623; padding: 10px 12px; border-radius: 4px; }
+    .ok { background: #e8f5e9; border-left: 4px solid #2e7d32; padding: 10px 12px; border-radius: 4px; }
+    small { color: #555; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Install the SafeHome lamp software</h1>
+  <p>
+    This page puts the lamp's software onto the lamp board. You only need to
+    do it once, or again when a new version is released. You don't need to
+    install anything else on your computer.
+  </p>
+
+  <div class="warn">
+    <strong>Before you start, you need:</strong>
+    <ul>
+      <li>The lamp board, plugged into this computer with a USB cable that can carry data.</li>
+      <li>The <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> browser.
+        Other browsers, such as Firefox, can't do this step.</li>
+      <li>Nothing else using the lamp board. Close any other program that shows the board, such as the Arduino IDE's Serial Monitor.</li>
+    </ul>
+  </div>
+
+  <h2>Steps</h2>
+  <ol>
+    <li>Make sure the lamp board is plugged in.</li>
+    <li>Click the blue <strong>Install SafeHome lamp</strong> button below.</li>
+    <li>A window appears listing the boards it can find. Click the one that shows
+      <strong>USB-Enhanced-SERIAL CH9102</strong> or <strong>USB Serial</strong>, then click <strong>Connect</strong>.
+      If you see more than one, unplug the board and see which name disappears.</li>
+    <li>Click <strong>Install</strong>. Wait for the progress bar to finish. It takes about 30 seconds.</li>
+    <li>When it says <strong>Installation complete</strong>, unplug the board and plug it in again.</li>
+  </ol>
+
+  <div class="big">
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate" style="background:#1565c0;color:#fff;border:0;border-radius:8px;padding:14px 22px;font-size:17px;cursor:pointer;">
+        Install SafeHome lamp
+      </button>
+      <span slot="unsupported">
+        This browser can't install the software. Open this page in Google Chrome or Microsoft Edge.
+      </span>
+      <span slot="not-allowed">
+        This page must be opened from its web address, not from a file on the computer.
+      </span>
+    </esp-web-install-button>
+  </div>
+
+  <div class="ok">
+    <strong>What happens next:</strong> the lamp board starts in setup mode and
+    creates a Wi-Fi network called <strong>SafeHome-Setup</strong>. Follow
+    <em>Step 5</em> of the setup guide to connect it to your home Wi-Fi.
+  </div>
+
+  <p><small>
+    If the install fails, unplug the board, plug it back in, and try again.
+    Still stuck? See the troubleshooting table in the setup guide.
+  </small></p>
+</main>
+</body>
+</html>

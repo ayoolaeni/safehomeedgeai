@@ -1,0 +1,26 @@
+# Build output (rebuilt automatically, never commit)
+app/build/
+app/.dart_tool/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/.packages
+app/android/.gradle/
+app/android/local.properties
+app/windows/flutter/ephemeral/
+app/ios/Pods/
+app/.idea/
+*.apk
+*.aab
+
+# Arduino build output
+firmware/**/build/
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Client handover kit (contains the APK, shared as a Release instead)
+client-kit/
+*.zip
