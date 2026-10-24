@@ -1,9 +1,8 @@
 # SafeHome Edge AI
 
-> **New here? Start with [docs/CLIENT_SETUP.md](docs/CLIENT_SETUP.md).** It's a
-> step-by-step guide for setting up the laptop, the lamp board, the phone and
-> the Wi-Fi, written for people who haven't used these tools before. The
-> sections below are the older developer notes.
+> **Setting up the lamp as a client?** Read [CLIENT_README.md](CLIENT_README.md)
+> instead. It's a step-by-step guide written for non-technical users. This
+> README is for developers.
 
 ### Installing the lamp software (no tools needed)
 
