@@ -523,20 +523,25 @@ If it ends with `mosquitto version ... running`, the settings are fine. Press
 **Ctrl+C** and do C. If it shows an error, send a screenshot to your
 developer.
 
-**C. Permanent fix: start Mosquitto with Windows another way.** Paste all of
-this:
+**C. Permanent fix: start Mosquitto when you log in.** Windows' own service
+(and a task running as the SYSTEM account) can fail on some laptops, but
+running Mosquitto under your own account works. This runs it hidden every
+time you log in. Paste all of this:
 ```
 Set-Service mosquitto -StartupType Disabled
-$action   = New-ScheduledTaskAction -Execute "C:\Program Files\mosquitto\mosquitto.exe" -Argument '-c "C:\Program Files\mosquitto\mosquitto.conf"' -WorkingDirectory "C:\Program Files\mosquitto"
-$trigger  = New-ScheduledTaskTrigger -AtStartup
-$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
-Register-ScheduledTask -TaskName "SafeHome Mosquitto" -Action $action -Trigger $trigger -Settings $settings -User SYSTEM -RunLevel Highest -Force
+Unregister-ScheduledTask -TaskName "SafeHome Mosquitto" -Confirm:$false -ErrorAction SilentlyContinue
+$action    = New-ScheduledTaskAction -Execute "powershell.exe" -Argument '-WindowStyle Hidden -NoProfile -Command "& ''C:\Program Files\mosquitto\mosquitto.exe'' -c ''C:\Program Files\mosquitto\mosquitto.conf''"' -WorkingDirectory "C:\Program Files\mosquitto"
+$trigger   = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+$settings  = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName "SafeHome Mosquitto" -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Force
 Start-ScheduledTask -TaskName "SafeHome Mosquitto"
-Start-Sleep 3
+Start-Sleep 5
 Get-NetTCPConnection -LocalPort 1883 -State Listen
 ```
-**It worked if** the last command shows `1883` and `Listen`. Mosquitto now
-starts by itself every time Windows starts, with no window to keep open.
+**It worked if** the last command shows `1883` and `Listen`. A window may flash
+briefly; Mosquitto then keeps running hidden, and starts by itself every time
+you log in.
 
 To undo this later:
 ```
