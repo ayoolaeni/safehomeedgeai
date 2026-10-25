@@ -497,6 +497,52 @@ Setup is finished.
 | The server window says **broker refused the connection** | The username or password in `config.json` (next to the `.exe`) is wrong. Open it in Notepad, fix `username` and `password`, save, and start the server again. |
 | The Assistant only answers simple questions | The local AI model isn't installed or Ollama isn't running. Do Step 13. |
 | The voice button says "unavailable" | **Phone:** **Settings > Apps > SafeHome > Permissions > Microphone > Allow**. **Laptop:** check it has a microphone and that **Settings > Privacy & security > Microphone** allows desktop apps. |
+| `Start-Service mosquitto` says **Failed to start service** | See **Mosquitto service won't start** below. |
+
+### Mosquitto service won't start
+
+On some laptops, Windows' Mosquitto service refuses to start even though
+Mosquitto itself works. Do these in an **administrator** PowerShell window.
+
+**A. Is Mosquitto already running?** An old copy started by hand keeps the
+port busy, so the service can't start.
+```
+Get-Process mosquitto -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 1883 -State Listen -ErrorAction SilentlyContinue
+```
+If either command prints a line, Mosquitto is already running, and you can
+carry on. To use the permanent fix below instead, first run
+`Stop-Process -Name mosquitto -Force`.
+
+**B. Are the settings fine?**
+```
+cd "C:\Program Files\mosquitto"
+.\mosquitto.exe -c mosquitto.conf -v
+```
+If it ends with `mosquitto version ... running`, the settings are fine. Press
+**Ctrl+C** and do C. If it shows an error, send a screenshot to your
+developer.
+
+**C. Permanent fix: start Mosquitto with Windows another way.** Paste all of
+this:
+```
+Set-Service mosquitto -StartupType Disabled
+$action   = New-ScheduledTaskAction -Execute "C:\Program Files\mosquitto\mosquitto.exe" -Argument '-c "C:\Program Files\mosquitto\mosquitto.conf"' -WorkingDirectory "C:\Program Files\mosquitto"
+$trigger  = New-ScheduledTaskTrigger -AtStartup
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1)
+Register-ScheduledTask -TaskName "SafeHome Mosquitto" -Action $action -Trigger $trigger -Settings $settings -User SYSTEM -RunLevel Highest -Force
+Start-ScheduledTask -TaskName "SafeHome Mosquitto"
+Start-Sleep 3
+Get-NetTCPConnection -LocalPort 1883 -State Listen
+```
+**It worked if** the last command shows `1883` and `Listen`. Mosquitto now
+starts by itself every time Windows starts, with no window to keep open.
+
+To undo this later:
+```
+Unregister-ScheduledTask -TaskName "SafeHome Mosquitto" -Confirm:$false
+Set-Service mosquitto -StartupType Automatic
+```
 
 ## Security notes
 
