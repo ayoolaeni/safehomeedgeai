@@ -12,6 +12,14 @@ app/.idea/
 *.apk
 *.aab
 
+# Home server: local settings (contain the broker password), data and builds
+server/config.json
+server/data/
+server/build/
+server/dist/
+server/*.spec
+__pycache__/
+
 # Arduino build output
 firmware/**/build/
 

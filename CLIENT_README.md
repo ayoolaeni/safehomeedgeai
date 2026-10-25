@@ -1,32 +1,81 @@
-# SafeHome smart lamp: setup guide
+# SafeHome: whole-home setup guide
 
-A smart lamp that senses motion and light, decides when it should be on, and
-asks you before acting until you trust it. You control it with the SafeHome
-app, on an **Android phone**, on your **Windows laptop**, or on both.
-Everything runs on your home Wi-Fi, with no cloud service.
+SafeHome is a Thriftogentic home digital twin for the whole house. A home
+server on your laptop (the **AHDT**, Agentic Home Digital Twin) coordinates
+six subsystem twins:
 
-The lamp board is already wired. This guide sets up the software so the lamp,
-your laptop and your phone can talk to each other. Follow the steps in order.
-Each step tells you what you should see when it worked.
+- **Energy:** grid, solar/battery and generator.
+- **Fire & Safety.**
+- **Water.**
+- **Climate & lighting.**
+- **Access & Security.**
+- **Resident.**
+
+Each twin senses, decides, and asks you before acting until it has earned your
+trust. You control the house with the SafeHome app, on an **Android phone**,
+on your **Windows laptop**, or on both. Everything runs on your home Wi-Fi,
+with no cloud service.
+
+The **sitting-room lamp** is the real hardware: an ESP32 board with motion and
+light sensors, already wired. The rest of the house (solar, generator, water
+tank, smoke detectors, door locks, air conditioners) is **simulated** by the
+home server, and the app labels those devices **SIMULATED**. Real devices can
+replace simulated ones later.
+
+This guide sets up the software so the lamp, the home server, your laptop and
+your phone can talk to each other. Follow the steps in order. Each step tells
+you what you should see when it worked.
 
 > **Part 1** is for you (the client).
 > **Part 2** at the end is for the developer: how to pack and send this kit.
 
 ---
 
-# Part 1: Setting up the lamp
+## Already set up the lamp before? Upgrade in 5 steps
+
+If you already did the first setup (Mosquitto installed, lamp on your Wi-Fi,
+app showing **CONNECTED**), you don't need to repeat it. Do only this:
+
+1. **Unzip the new kit** (right-click `safehome-client-kit.zip` > **Extract
+   All**).
+2. **Update the phone app:** copy the new `safehome-edge-ai.apk` to your
+   Android phone, tap it, and tap **Update** (or **Install**). Your laptop
+   address and login are kept. The same steps as Step 9.
+3. **Update the laptop app** (if you use it): replace your old **SafeHome**
+   folder with the new **SafeHome** folder from the kit, as in Step 10.
+4. **Start the home server:** do **Step 12** below. It asks for your broker
+   username (`safehome`) and the password you chose. You enter them only the
+   first time.
+5. **Plug in the lamp board** and open the app. The **Home** tab now shows the
+   whole house. Then try **Step 14** (Test it).
+
+That's all. The lamp board needs **no** changes.
+
+---
+
+---
+
+# Part 1: Setting up the house
 
 ## How the parts work together
 
 ```
-   Android phone (SafeHome app) --+
-                                  +--Wi-Fi-->  Laptop (Mosquitto)  <--Wi-Fi-->  Lamp board
-   Laptop (SafeHome app) ---------+
+   Android phone (SafeHome app) --+               Laptop
+                                  +--Wi-Fi-->  Mosquitto  <--Wi-Fi-->  Lamp board (ESP32)
+   Laptop (SafeHome app) ---------+               ^
+                                                  |
+                                     SafeHome home server (AHDT + 6 twins,
+                                     optional local AI model)
 ```
 
 - **The laptop** runs a small free program called **Mosquitto** (the
-  "broker"). It passes messages between the app and the lamp, like a post
-  office. The laptop must be **on and awake** for the lamp to be controlled.
+  "broker"). It passes messages between the app, the home server and the
+  lamp, like a post office. The laptop must be **on and awake** for the house
+  to be controlled.
+- **The home server** (`safehome-server.exe`) is the brain of the whole house.
+  It runs the six twins, checks every action against its safety rules,
+  keeps a tamper-proof activity log, and can use a small AI model on the
+  laptop to answer your questions.
 - **The lamp board** joins your home Wi-Fi, reads its sensors and switches the
   lamp.
 - **The SafeHome app** sends the commands. It runs on an Android phone
@@ -44,6 +93,7 @@ Everything must be on the **same home Wi-Fi**.
   - `CLIENT_README.md`: this guide.
   - `safehome-edge-ai.apk`: the app for an Android phone.
   - `SafeHome\`: the app for the Windows laptop.
+  - `safehome-server.exe`: the whole-home server for the laptop.
   - `broker\mosquitto.conf`: a settings file for the laptop.
 - A **Windows laptop** with **Google Chrome** or **Microsoft Edge**.
 - A **phone** (Android or iPhone) for Step 8. An Android phone can also run
@@ -284,8 +334,9 @@ Do this in each app you installed (the phone, the laptop, or both).
 
 1. **On the phone:** make sure the phone is on your **home Wi-Fi** (not
    SafeHome-Setup).
-2. In the app, tap the red card that says **DISCONNECTED**, "Tap to enter
-   your laptop address".
+2. In the app, tap **Tap to enter your laptop address** at the bottom of the
+   coloured box at the top of the Home tab (or the **settings** button at the
+   top right).
 3. Fill in:
 
    | Field | On the Android phone | On the laptop |
@@ -298,23 +349,93 @@ Do this in each app you installed (the phone, the laptop, or both).
    laptop.
 4. Tap **Save**.
 
-**You should see:** the card turns green and shows **CONNECTED**. Within a few
-seconds the **Light**, **Motion** and **Light level** cards fill in, and the
-**Wi-Fi** card shows your home Wi-Fi name. That means the lamp is talking to
-the app.
+**You should see:** the line at the top changes to **Connected to …**. Until you
+do Step 12, the Home tab says **Home server offline**; that's expected.
 
 ---
 
-## Step 12: Test it
+## Step 12: Start the home server (the whole house)
 
-1. Tap **TURN ON**. The lamp turns on (you may hear the relay click).
-2. Tap **TURN OFF**. The lamp turns off.
-3. Wave your hand in front of the motion sensor. The **Motion** card changes.
-4. Hold the blue voice button and say **"turn on the light"**.
+1. In the kit folder, copy `safehome-server.exe` into a new folder, for
+   example **Documents\SafeHome Server**. The server keeps its settings and
+   activity log next to the `.exe`, so give it its own folder.
+2. Double-click `safehome-server.exe`. If a blue window says **"Windows
+   protected your PC"**, click **More info**, then **Run anyway**.
+3. A black window opens. The first time, it asks four questions:
+
+   | Question | What to type |
+   | --- | --- |
+   | **Broker address** | Press **Enter** (keeps `localhost`) |
+   | **Broker username** | `safehome`, then **Enter** |
+   | **Broker password** | The password from Step 3, then **Enter** |
+   | **Resident's name** | Your first name, then **Enter** |
+
+   It saves your answers in `config.json` in the same folder, so you are only
+   asked once.
+
+4. Leave the black window open (you can minimise it). It shows every decision
+   the house makes.
+
+**You should see:** in the app, the Home tab fills in with the energy and
+water cards, the six subsystem twins and **Whole home · 18:00**. The house
+clock runs fast (one hour per minute) so you can watch a whole day quickly.
+You can change the speed in the app.
+
+**To start it automatically with Windows:** press **Windows key + R**, type
+`shell:startup` and press **Enter**. Right-click `safehome-server.exe`,
+choose **Show more options > Create shortcut**, and move the shortcut into the
+folder that opened.
+
+---
+
+## Step 13 (optional): Install the local AI model
+
+The home server can answer open questions ("Why should we pump water at
+noon?") with a small AI model that runs **on the laptop**, without the
+internet. Commands and status questions work without it.
+
+1. Download **Ollama for Windows** from **https://ollama.com/download** and
+   install it.
+2. Open PowerShell and type:
+   ```
+   ollama pull llama3.2
+   ```
+   It downloads about 2 GB once. A laptop with 8 GB of memory or more is
+   recommended.
+3. Within a minute the app's **Twins** tab shows **LOCAL SLM llama3.2**.
+
+---
+
+## Step 14: Test it
+
+**The real lamp:**
+1. On the **Home** tab, scroll down to **Real device** and tap **Sitting room
+   lamp**. Tap **TURN ON**:
+   the lamp turns on (you may hear the relay click). Tap **TURN OFF**.
+2. Wave your hand in front of the motion sensor. The **Motion** card changes.
+3. Hold the blue voice button and say **"turn on the light"**.
    - On the **Android phone**, this works once microphone access is allowed.
    - On the **laptop**, it only works if the laptop has a microphone. If it
      says "Voice unavailable", use the buttons instead; everything else works
      the same.
+
+**The whole house** (use the flask icon at the top of the app for demo
+events):
+1. On the **Home** tab, set **Whole-home mode** to **Assisted**.
+2. Flask icon > **Grid outage**. The house switches to solar/battery by itself
+   (a fail-safe, so it happens in every mode).
+3. Flask icon > **Everyone leaves**, then **Arrive home**. The **Waiting for
+   you** list asks to unlock the front door for you. Tap **APPROVE**: you are
+   welcomed home, on the screen and in a spoken voice on the laptop.
+4. Flask icon > **Kitchen fire**. The whole house responds together:
+   - the siren sounds and the doors unlock;
+   - the kitchen power is cut and the sprinkler starts;
+   - the lights come on, including the real lamp;
+   - an alert is sent over the 4G/5G backup (simulated).
+5. Flask icon > **Clear all hazards**. Wait a few seconds, then tap **Reset
+   alarm** and **Restore power**. Only a person can reset an alarm, and only
+   once the hazard has cleared.
+6. **Assistant** tab: ask "How is the house?" or "Turn on the bedroom light".
 
 Setup is finished.
 
@@ -322,17 +443,34 @@ Setup is finished.
 
 ## Everyday use
 
-- **Every day:** keep the laptop on (Mosquitto starts by itself) and the
-  lamp board powered. Open the SafeHome app on your Android phone (on home
-  Wi-Fi) or from the **SafeHome** icon on the laptop's Desktop.
-- **Buttons:** tap **TURN ON** or **TURN OFF**.
-- **Voice:** hold the blue voice button and say "turn on the light" or
-  "turn off the light".
-- **Modes:**
-  - **Manual:** you control the lamp. It always starts in this mode.
-  - **Assisted:** the lamp suggests changes, and you approve or decline them.
-  - **Autonomous:** the lamp acts on its own, once it has earned your trust.
-    Until then, it keeps asking.
+- **Every day:**
+  - Keep the laptop on and the home server running. Mosquitto starts by
+    itself.
+  - Keep the lamp board powered.
+  - Open the SafeHome app on your Android phone (on home Wi-Fi) or from the
+    **SafeHome** icon on the laptop's Desktop.
+- **The app's five tabs:**
+  - **Home:** alerts, anything waiting for your approval, energy, water and
+    the six twins.
+  - **Rooms:** a floor plan showing who is where and which lights are on,
+    plus every device in each room.
+  - **Twins:** each twin's AI principles, agents, mode and how far it has
+    earned your trust.
+  - **Assistant:** type or speak to the house.
+  - **Activity:** the tamper-proof log of every decision.
+- **Modes** (for the whole house on the Home tab, or per twin on the Twins
+  tab):
+  - **Manual:** you control everything. Every twin starts in this mode.
+  - **Assisted:** twins suggest changes, and you approve or decline them.
+  - **Autonomous:** a twin acts on its own only after it has graduated from
+    **THRIFTOGENTIC** to **THRIFTONOMOUS**. To graduate, it needs enough
+    approvals, a hazard test, a trial period and your sign-off. Until then,
+    it keeps asking.
+  - **Always, in every mode:**
+    - Fail-safes run: switching to battery in a blackout, fire response,
+      closing the water valve on a leak.
+    - The Fire & Safety twin never acts alone.
+    - Letting a stranger in always needs you.
 - **Changing Wi-Fi later:** in **Manual** mode, tap the **Wi-Fi** card and
   pick another network. If the lamp can't reach the laptop on the new network
   within a minute, it goes back to the old one.
@@ -352,9 +490,12 @@ Setup is finished.
 | Your Wi-Fi isn't in the list on the setup page | It's probably 5 GHz only. Use the 2.4 GHz network, or turn on 2.4 GHz in the router. |
 | "Windows protected your PC" when opening the laptop app | Click **More info**, then **Run anyway**. |
 | The laptop app doesn't open at all, or a DLL is missing | Install the Visual C++ Redistributable (Step 10), and make sure you copied the **whole** SafeHome folder, not just SafeHome.exe. |
-| The app says **DISCONNECTED** | Check: the laptop is on and awake; `Get-Service mosquitto` shows `Running`; the username and password are correct. **Phone:** it's on home Wi-Fi and the address is the laptop IP. **Laptop:** the address is `localhost`. |
+| The app says **Not connected** | Check: the laptop is on and awake; `Get-Service mosquitto` shows `Running`; the username and password are correct. **Phone:** it's on home Wi-Fi and the address is the laptop IP. **Laptop:** the address is `localhost`. |
 | App is **CONNECTED** but the cards stay empty and the lamp doesn't respond | The lamp isn't reaching the laptop. Check the board has power. If the laptop's IP changed, see the next row. |
 | The laptop's IP address changed (after a router restart) | Do Step 5 again and enter the new address in the **phone** app (Step 11). The laptop app is fine, since it uses `localhost`. The lamp also has the old address saved, and it won't reopen SafeHome-Setup by itself in this case, so ask your developer to reset its setup. To stop this happening, ask whoever manages the router to give the laptop a **fixed (reserved) IP address** right after setup. |
+| The app says **Home server offline** | On the laptop, start `safehome-server.exe` (Step 12) and leave its window open. The real lamp still works without it. |
+| The server window says **broker refused the connection** | The username or password in `config.json` (next to the `.exe`) is wrong. Open it in Notepad, fix `username` and `password`, save, and start the server again. |
+| The Assistant only answers simple questions | The local AI model isn't installed or Ollama isn't running. Do Step 13. |
 | The voice button says "unavailable" | **Phone:** **Settings > Apps > SafeHome > Permissions > Microphone > Allow**. **Laptop:** check it has a microphone and that **Settings > Privacy & security > Microphone** allows desktop apps. |
 
 ## Security notes
@@ -373,6 +514,8 @@ The client doesn't need the source code, Flutter or Arduino. She only needs:
 
 - the **Android app** (`safehome-edge-ai.apk`),
 - the **Windows app** (the `SafeHome` folder),
+- the **home server** (`safehome-server.exe`, built with PyInstaller so she
+  doesn't need Python),
 - the **Mosquitto settings file**,
 - **this guide**.
 
@@ -411,7 +554,14 @@ cd ..
 Before sending, check both reach **CONNECTED**: the APK on a test phone (with
 the laptop IP), and the Windows app with `localhost`.
 
-## 3. Pack the kit
+## 3. Build the home server
+
+Double-click `server\build-server-exe.bat`. It runs the server tests first
+and builds nothing if they fail. It creates `server\dist\safehome-server.exe`
+(about 50 MB). To run the server from source while developing, use
+`server\start-server.bat` instead (needs Python 3.11+).
+
+## 4. Pack the kit
 
 From the project folder:
 
@@ -421,17 +571,19 @@ New-Item -ItemType Directory -Force client-kit\broker | Out-Null
 Copy-Item app\build\app\outputs\flutter-apk\app-release.apk client-kit\safehome-edge-ai.apk
 Copy-Item app\build\windows\x64\runner\Release client-kit\SafeHome -Recurse
 Rename-Item client-kit\SafeHome\safehome_edge_ai.exe SafeHome.exe
+Copy-Item server\dist\safehome-server.exe client-kit\
 Copy-Item broker\mosquitto.conf client-kit\broker\
 Copy-Item CLIENT_README.md client-kit\
 Compress-Archive -Path client-kit\* -DestinationPath safehome-client-kit.zip -Force
 ```
 
-This creates `safehome-client-kit.zip` (about 33 MB) containing:
+This creates `safehome-client-kit.zip` (about 80 MB) containing:
 
 ```
 safehome-client-kit.zip
 ├── CLIENT_README.md
 ├── safehome-edge-ai.apk
+├── safehome-server.exe
 ├── SafeHome\
 │   ├── SafeHome.exe
 │   ├── flutter_windows.dll
@@ -443,9 +595,9 @@ safehome-client-kit.zip
 
 `client-kit/` and `*.zip` are in `.gitignore`, so they are never committed.
 
-## 4. Send it to the client
+## 5. Send it to the client
 
-The zip is about 33 MB, which is over the 25 MB email limit. Use one of these
+The zip is about 80 MB, which is over the 25 MB email limit. Use one of these
 instead:
 
 - **Google Drive:** upload the zip, click **Share**, set **Anyone with the

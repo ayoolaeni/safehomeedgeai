@@ -4,6 +4,21 @@
 > instead. It's a step-by-step guide written for non-technical users. This
 > README is for developers.
 
+### Whole home (version 2)
+
+The project now covers the whole house, not one room:
+- **`server/`** is the Thriftogentic Home Digital Twin home server. It runs
+  the AHDT orchestrator, six subsystem twins, the Thriftogentic AI guardrail
+  layer, per-twin graduation, a hash-chained audit log and an optional local
+  SLM through Ollama.
+- **The Flutter app** is a whole-home dashboard.
+- **The ESP32 lamp** below is the real sitting-room node and is unchanged.
+
+The layer-by-layer map is in [docs/WHOLE_HOME.md](docs/WHOLE_HOME.md). To
+run the server from source:
+`cd server && pip install -r requirements.txt && python -m thdt`. To run its
+tests: `python -m unittest discover -s tests`.
+
 ### Installing the lamp software (no tools needed)
 
 The lamp board is flashed from a web page, so nobody needs the Arduino tools:

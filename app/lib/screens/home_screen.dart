@@ -12,10 +12,10 @@ import '../widgets/proposal_card.dart';
 import '../widgets/status_tile.dart';
 import '../widgets/wifi_sheet.dart';
 
-/// The whole app is one scrollable screen, no navigation - see
-/// AGENT_BUILD_SPEC.md section 5.3. Everything the user might need,
-/// including the manual override buttons, is visible without digging
-/// through menus.
+/// Controls for the real ESP32 lamp in the sitting room, opened from the
+/// Rooms and Home tabs. The lamp runs its own on-device agent, so this
+/// screen talks to it directly on the original home/... topics and keeps
+/// working even when the whole-home server is not running.
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -145,7 +145,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('SAFE HOME EDGE AI')),
+      appBar: AppBar(title: const Text('Sitting room lamp (ESP32)')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),

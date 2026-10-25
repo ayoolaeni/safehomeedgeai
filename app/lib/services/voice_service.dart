@@ -29,7 +29,18 @@ class VoiceService {
   /// either as soon as speech_to_text reports a final result, or (if the
   /// button is released first) from stopListening using whatever partial
   /// transcript was captured so far.
-  Future<void> startListening({required void Function(VoiceCommand) onCommand}) async {
+  Future<void> startListening({required void Function(VoiceCommand) onCommand}) =>
+      startDictation(onText: (words) => onCommand(parseCommand(words)));
+
+  /// Called when the user releases the voice button. If a final result
+  /// already delivered a command, this is a no-op; otherwise it stops the
+  /// microphone and evaluates whatever partial transcript was captured.
+  Future<void> stopListening({required void Function(VoiceCommand) onCommand}) =>
+      stopDictation(onText: (words) => onCommand(parseCommand(words)));
+
+  /// Same hold-to-speak flow, but hands back the raw transcript. Used by the
+  /// home assistant, which sends the words to the home server to interpret.
+  Future<void> startDictation({required void Function(String) onText}) async {
     if (!_available) return;
     _lastWords = '';
     _commandDelivered = false;
@@ -38,24 +49,21 @@ class VoiceService {
         _lastWords = result.recognizedWords;
         if (result.finalResult && !_commandDelivered) {
           _commandDelivered = true;
-          onCommand(parseCommand(_lastWords));
+          onText(_lastWords);
         }
       },
       listenOptions: SpeechListenOptions(
-        listenFor: const Duration(seconds: 8),
+        listenFor: const Duration(seconds: 10),
         pauseFor: const Duration(seconds: 3),
       ),
     );
   }
 
-  /// Called when the user releases the voice button. If a final result
-  /// already delivered a command, this is a no-op; otherwise it stops the
-  /// microphone and evaluates whatever partial transcript was captured.
-  Future<void> stopListening({required void Function(VoiceCommand) onCommand}) async {
+  Future<void> stopDictation({required void Function(String) onText}) async {
     await _speech.stop();
     if (!_commandDelivered) {
       _commandDelivered = true;
-      onCommand(parseCommand(_lastWords));
+      onText(_lastWords);
     }
   }
 

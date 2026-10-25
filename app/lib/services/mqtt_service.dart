@@ -10,6 +10,7 @@ import 'package:multicast_dns/multicast_dns.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/device_state.dart';
+import '../models/home_state.dart';
 import '../models/log_entry.dart';
 import '../models/proposal.dart';
 import '../models/wifi_network.dart';
@@ -52,6 +53,27 @@ class MqttService extends ChangeNotifier {
   String? _wifiSsid;
   String? _wifiIp;
 
+  // Whole-home digital twin (the home server on the laptop).
+  HomeState? _home;
+  DateTime? _homeFreshAt;
+  Timer? _staleTimer;
+  final List<Map<String, dynamic>> _answers = [];
+  final StreamController<String> _acks = StreamController<String>.broadcast();
+
+  /// Latest whole-home snapshot, or null if the home server never answered.
+  HomeState? get home => _home;
+
+  /// True while live snapshots keep arriving. A retained snapshot left over
+  /// from a server that has since stopped does not count.
+  bool get serverOnline =>
+      _homeFreshAt != null && DateTime.now().difference(_homeFreshAt!).inSeconds < 8;
+
+  /// Questions and answers from the home assistant, newest first.
+  List<Map<String, dynamic>> get answers => List.unmodifiable(_answers);
+
+  /// One short line per command the server has carried out (or refused).
+  Stream<String> get acks => _acks.stream;
+
   DeviceState get deviceState => _deviceState;
 
   /// Networks from the last scan the ESP32 published. Empty until the first
@@ -83,6 +105,11 @@ class MqttService extends ChangeNotifier {
     _brokerIp = prefs.getString(_prefsBrokerIpKey) ?? '';
     _brokerUser = prefs.getString(_prefsBrokerUserKey) ?? '';
     _brokerPass = prefs.getString(_prefsBrokerPassKey) ?? '';
+    // Rebuild every few seconds so "server offline" shows up even when no
+    // message arrives to trigger a rebuild.
+    _staleTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (!_disposed) notifyListeners();
+    });
     unawaited(_connect());
   }
 
@@ -212,6 +239,9 @@ class MqttService extends ChangeNotifier {
       'home/agent/log',
       'home/wifi/scans',
       'home/wifi/status',
+      'thdt/state',
+      'thdt/answer',
+      'thdt/ack',
     ]) {
       client.subscribe(topic, MqttQos.atLeastOnce);
     }
@@ -229,15 +259,32 @@ class MqttService extends ChangeNotifier {
     for (final event in events) {
       final topic = event.topic;
       final recMess = event.payload as MqttPublishMessage;
-      final payload =
-          MqttPublishPayload.bytesToStringAsString(recMess.payload.message);
-      _handlePayload(topic, payload);
+      final payload = utf8.decode(recMess.payload.message, allowMalformed: true);
+      _handlePayload(topic, payload, retained: recMess.header?.retain ?? false);
     }
   }
 
-  void _handlePayload(String topic, String payload) {
+  void _handlePayload(String topic, String payload, {bool retained = false}) {
     try {
       switch (topic) {
+        case 'thdt/state':
+          _home = HomeState(asMap(jsonDecode(payload)));
+          if (!retained) _homeFreshAt = DateTime.now();
+          break;
+        case 'thdt/answer':
+          final ans = asMap(jsonDecode(payload));
+          final i = _answers.indexWhere((a) => a['id'] == ans['id']);
+          if (i >= 0) {
+            _answers[i] = ans;
+          } else {
+            _answers.insert(0, ans);
+          }
+          break;
+        case 'thdt/ack':
+          final ack = asMap(jsonDecode(payload));
+          final result = ack['result']?.toString() ?? '';
+          if (result.isNotEmpty && !retained) _acks.add(result);
+          return;
         case 'home/light/state':
           _deviceState = _deviceState.copyWith(lightOn: payload.trim() == 'ON');
           break;
@@ -376,9 +423,58 @@ class MqttService extends ChangeNotifier {
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Whole-home commands. Each goes to the home server on thdt/cmd, which
+  // passes it through the Terse AI layer before anything is switched.
+  // ---------------------------------------------------------------------
+
+  void sendHomeCommand(Map<String, dynamic> cmd) => _publish('thdt/cmd', jsonEncode(cmd));
+
+  /// Lets widget tests render the screens from a recorded server snapshot.
+  @visibleForTesting
+  void debugSetHome(Map<String, dynamic> raw) {
+    _home = HomeState(raw);
+    _homeFreshAt = DateTime.now();
+    notifyListeners();
+  }
+
+  void setHomeDevice(String deviceId, bool on) =>
+      sendHomeCommand({'type': 'device', 'device': deviceId, 'on': on});
+
+  void setTwinMode(String twin, String mode) =>
+      sendHomeCommand({'type': 'mode', 'twin': twin, 'mode': mode});
+
+  void respondHome(String proposalId, bool approve) =>
+      sendHomeCommand({'type': 'respond', 'id': proposalId, 'approve': approve});
+
+  void runScenario(String name, {String? room, String? value}) => sendHomeCommand({
+        'type': 'scenario',
+        'name': name,
+        if (room != null) 'room': room,
+        if (value != null) 'value': value,
+      });
+
+  void resetAlarm() => sendHomeCommand({'type': 'reset_alarm'});
+  void restorePower() => sendHomeCommand({'type': 'restore_power'});
+  void markHazardSuite(String twin) => sendHomeCommand({'type': 'hazard_suite', 'twin': twin});
+  void startDistillation() => sendHomeCommand({'type': 'distill'});
+  void verifyAudit() => sendHomeCommand({'type': 'verify_audit'});
+  void setPowerSource(String source) => sendHomeCommand({'type': 'set_source', 'source': source});
+
+  /// Sends a typed or spoken question to the home assistant. The answer
+  /// arrives on thdt/answer and replaces the "thinking" placeholder.
+  void ask(String text) {
+    final id = 'q${DateTime.now().millisecondsSinceEpoch}';
+    _answers.insert(0, {'id': id, 'question': text, 'answer': null, 'source': 'thinking'});
+    notifyListeners();
+    sendHomeCommand({'type': 'ask', 'id': id, 'text': text});
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _staleTimer?.cancel();
+    _acks.close();
     _reconnectTimer?.cancel();
     _client?.disconnect();
     super.dispose();
