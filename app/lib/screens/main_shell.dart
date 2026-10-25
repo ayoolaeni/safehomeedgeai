@@ -80,46 +80,57 @@ class _MainShellState extends State<MainShell> {
               child: const Icon(Icons.home_rounded, color: Colors.white, size: 22),
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('SAFE HOME EDGE AI', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
-                Row(children: [
-                  Container(
-                    width: 7,
-                    height: 7,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: online
-                          ? const Color(0xFF10B981)
-                          : (mqtt.deviceState.connected ? const Color(0xFFF59E0B) : const Color(0xFFEF4444)),
+            Flexible(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('SAFE HOME EDGE AI',
+                      overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                  Row(children: [
+                    Container(
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: online
+                            ? const Color(0xFF10B981)
+                            : (mqtt.deviceState.connected ? const Color(0xFFF59E0B) : const Color(0xFFEF4444)),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 5),
-                  Text(
-                    !mqtt.deviceState.connected
-                        ? 'Not connected'
-                        : online
-                            ? 'Whole home live'
-                            : 'Home server offline',
-                    style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500),
-                  ),
-                ]),
-              ],
+                    const SizedBox(width: 5),
+                    Text(
+                      !mqtt.deviceState.connected
+                          ? 'Not connected'
+                          : online
+                              ? 'Whole home live'
+                              : 'Home server offline',
+                      style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant, fontWeight: FontWeight.w500),
+                    ),
+                  ]),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
-          IconButton.filledTonal(
-            tooltip: 'Simulation & demo events',
-            icon: const Icon(Icons.science_rounded),
-            onPressed: online ? () => SimulationSheet.show(context) : null,
+          Tooltip(
+            message: 'Simulation & demo events',
+            child: FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+              icon: const Icon(Icons.science_rounded, size: 18),
+              label: const Text('Demo'),
+              onPressed: online ? () => SimulationSheet.show(context) : null,
+            ),
           ),
-          const SizedBox(width: 4),
-          IconButton.filledTonal(
-            tooltip: 'Laptop (broker) settings',
-            icon: const Icon(Icons.settings_rounded),
-            onPressed: () => _editBroker(mqtt),
+          const SizedBox(width: 6),
+          Tooltip(
+            message: 'Laptop (broker) settings',
+            child: FilledButton.tonalIcon(
+              style: FilledButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8)),
+              icon: const Icon(Icons.settings_rounded, size: 18),
+              label: const Text('Connect'),
+              onPressed: () => _editBroker(mqtt),
+            ),
           ),
           const SizedBox(width: 12),
         ],
@@ -145,11 +156,14 @@ class _MainShellState extends State<MainShell> {
           ),
           const NavigationDestination(
               icon: Icon(Icons.meeting_room_outlined), selectedIcon: Icon(Icons.meeting_room_rounded), label: 'Rooms'),
-          const NavigationDestination(icon: Icon(Icons.hub_outlined), selectedIcon: Icon(Icons.hub_rounded), label: 'Twins'),
+          const NavigationDestination(
+              icon: Icon(Icons.hub_outlined), selectedIcon: Icon(Icons.hub_rounded), label: 'Twins'),
           const NavigationDestination(
               icon: Icon(Icons.auto_awesome_outlined), selectedIcon: Icon(Icons.auto_awesome), label: 'Assistant'),
           const NavigationDestination(
-              icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long_rounded), label: 'Activity'),
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long_rounded),
+              label: 'Activity'),
         ],
       ),
     );

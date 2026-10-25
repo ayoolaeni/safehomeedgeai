@@ -540,8 +540,8 @@ In PowerShell, from the project folder:
 ```powershell
 cd app
 flutter pub get
-flutter build apk --release
-flutter build windows --release
+flutter build apk --release --no-tree-shake-icons
+flutter build windows --release --no-tree-shake-icons
 cd ..
 ```
 
