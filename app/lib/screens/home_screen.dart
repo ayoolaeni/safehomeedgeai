@@ -6,10 +6,9 @@ import '../models/device_state.dart';
 import '../services/mqtt_service.dart';
 import '../services/voice_service.dart';
 import '../widgets/broker_dialog.dart';
+import '../widgets/home_widgets.dart';
 import '../widgets/log_list.dart';
-import '../widgets/mode_selector.dart';
 import '../widgets/proposal_card.dart';
-import '../widgets/status_tile.dart';
 import '../widgets/wifi_sheet.dart';
 
 /// Controls for the real ESP32 lamp in the sitting room, opened from the
@@ -22,6 +21,10 @@ class HomeScreen extends StatefulWidget {
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
+
+const _amber = Color(0xFFF59E0B);
+const _green = Color(0xFF059669);
+const _red = Color(0xFFDC2626);
 
 class _HomeScreenState extends State<HomeScreen> {
   final VoiceService _voiceService = VoiceService();
@@ -36,7 +39,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _voiceService.init().then((ok) => setState(() => _voiceReady = ok));
+    _voiceService.init().then((ok) {
+      if (mounted) setState(() => _voiceReady = ok);
+    });
 
     // Separate from the context.watch() used for rebuilding the UI below -
     // this listener drives a one-off SnackBar the moment the ESP32 actually
@@ -145,172 +150,215 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Sitting room lamp (ESP32)')),
+      appBar: AppBar(
+        title: const Text('Sitting room lamp'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Tag('REAL ESP32', Theme.of(context).colorScheme.primary),
+          ),
+        ],
+      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildConnectionTile(mqtt, state),
-              const SizedBox(height: 8),
-              _buildWifiTile(mqtt),
-              const SizedBox(height: 16),
-              _buildStatusRow(state),
-              const SizedBox(height: 16),
-              _buildLightButtons(),
-              const SizedBox(height: 16),
-              _buildVoiceButton(),
-              const SizedBox(height: 20),
-              Text('Mode', style: Theme.of(context).textTheme.titleMedium),
-              const SizedBox(height: 8),
-              ModeSelector(
-                currentMode: state.mode,
-                onModeSelected: mqtt.setMode,
-              ),
-              const SizedBox(height: 16),
-              _buildAutonomyBanner(state),
-              const SizedBox(height: 16),
-              if (mqtt.pendingProposal != null)
-                ProposalCard(
-                  proposal: mqtt.pendingProposal!,
-                  receivedAt: mqtt.pendingProposalReceivedAt ?? DateTime.now(),
-                  onApprove: () => mqtt.respondToProposal(true),
-                  onDecline: () => mqtt.respondToProposal(false),
-                  onExpire: () => mqtt.clearExpiredProposal(mqtt.pendingProposal!.id),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 700),
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 24),
+              children: [
+                _buildLampHero(state),
+                const SizedBox(height: 12),
+                _buildStatusRow(state),
+                const SizedBox(height: 12),
+                _buildVoiceButton(),
+                if (mqtt.pendingProposal != null) ...[
+                  const SectionTitle('Lamp asks'),
+                  ProposalCard(
+                    proposal: mqtt.pendingProposal!,
+                    receivedAt: mqtt.pendingProposalReceivedAt ?? DateTime.now(),
+                    onApprove: () => mqtt.respondToProposal(true),
+                    onDecline: () => mqtt.respondToProposal(false),
+                    onExpire: () => mqtt.clearExpiredProposal(mqtt.pendingProposal!.id),
+                  ),
+                ],
+                const SectionTitle('Mode'),
+                ModeChips(
+                  current: operatingModeToString(state.mode),
+                  onSelected: (m) => mqtt.setMode(operatingModeFromString(m)),
                 ),
-              const SizedBox(height: 20),
-              Text('Activity log', style: Theme.of(context).textTheme.titleMedium),
-              const Divider(),
-              LogList(entries: mqtt.logs),
-            ],
+                const SizedBox(height: 10),
+                _buildAutonomyBanner(state),
+                const SectionTitle('Connection'),
+                Card(
+                  child: Column(children: [
+                    _buildConnectionTile(mqtt, state),
+                    const Divider(height: 1, indent: 70),
+                    _buildWifiTile(mqtt),
+                  ]),
+                ),
+                const SectionTitle('Activity log'),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    child: LogList(entries: mqtt.logs),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildConnectionTile(MqttService mqtt, DeviceState state) {
-    final since = _lastConnectedChangeAt;
-    final sinceText = since == null ? '' : DateFormat.Hms().format(since);
-    return Card(
-      color: state.connected ? Colors.green.shade50 : Colors.red.shade50,
-      child: ListTile(
-        leading: Icon(
-          state.connected ? Icons.wifi : Icons.wifi_off,
-          color: state.connected ? Colors.green : Colors.red,
+  // The lamp itself: a glowing bulb, its state, and On / Off buttons.
+  Widget _buildLampHero(DeviceState state) {
+    final on = state.lightOn;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 350),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: on
+              ? [const Color(0xFFFBBF24), const Color(0xFFD97706)]
+              : [const Color(0xFF334155), const Color(0xFF1E293B)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
         ),
-        title: Text(state.connected ? 'CONNECTED' : 'DISCONNECTED'),
-        subtitle: Text(
-          !mqtt.brokerConfigured
-              ? 'Tap to enter your laptop address'
-              : 'Laptop ${mqtt.brokerIp}'
-                  '${mqtt.resolvedIp == null ? '' : ' (${mqtt.resolvedIp})'}'
-                  '${sinceText.isEmpty ? '' : ' · since $sinceText'}',
-        ),
-        trailing: const Icon(Icons.edit, size: 18),
-        onTap: () => _editBroker(mqtt),
+        borderRadius: BorderRadius.circular(28),
       ),
-    );
-  }
-
-  Widget _buildWifiTile(MqttService mqtt) {
-    final reason = mqtt.wifiSwitchReason;
-    final showReason = mqtt.wifiSwitchState == 'REVERTED' ||
-        mqtt.wifiSwitchState == 'REJECTED' ||
-        mqtt.wifiSwitchState == 'CONNECTING';
-    return Card(
-      child: ListTile(
-        leading: const Icon(Icons.router),
-        title: Text('Wi-Fi: ${mqtt.wifiSsid ?? 'unknown'}'),
-        subtitle: Text(
-          showReason && reason.isNotEmpty
-              ? '${mqtt.wifiSwitchState}: $reason'
-              : (mqtt.wifiIp == null ? 'Tap to choose another network' : 'IP ${mqtt.wifiIp} · tap to change'),
-        ),
-        trailing: const Icon(Icons.chevron_right),
-        onTap: () => WifiSheet.show(context),
+      child: Column(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 350),
+            width: 110,
+            height: 110,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white.withValues(alpha: on ? 0.95 : 0.08),
+              boxShadow: on
+                  ? [BoxShadow(color: Colors.yellow.withValues(alpha: 0.7), blurRadius: 40, spreadRadius: 6)]
+                  : null,
+            ),
+            child: Icon(
+              on ? Icons.lightbulb_rounded : Icons.lightbulb_outline_rounded,
+              size: 60,
+              color: on ? _amber : Colors.white54,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            on ? 'The lamp is on' : 'The lamp is off',
+            style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            state.connected ? 'Confirmed by the ESP32' : 'Waiting for the laptop connection',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _sendLightCommand(true),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFFB45309),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  icon: const Icon(Icons.power_settings_new_rounded),
+                  label: const Text('Turn on', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: () => _sendLightCommand(false),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black.withValues(alpha: 0.35),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  icon: const Icon(Icons.power_off_rounded),
+                  label: const Text('Turn off', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
   Widget _buildStatusRow(DeviceState state) {
+    Widget tile(StatTile t) => Expanded(child: t);
     return Row(
       children: [
-        StatusTile(
+        tile(StatTile(
+          icon: state.lightOn ? Icons.lightbulb_rounded : Icons.lightbulb_outline_rounded,
           label: 'Light',
           value: state.lightOn ? 'ON' : 'OFF',
-          icon: Icons.lightbulb,
-          color: state.lightOn ? Colors.amber.shade800 : Colors.grey,
-        ),
-        StatusTile(
+          color: state.lightOn ? _amber : Colors.blueGrey,
+        )),
+        const SizedBox(width: 10),
+        tile(StatTile(
+          icon: Icons.directions_walk_rounded,
           label: 'Motion',
-          value: state.motionDetected ? 'DETECTED' : 'NONE',
-          icon: Icons.directions_walk,
-          color: state.motionDetected ? Colors.blue : Colors.grey,
-        ),
-        StatusTile(
+          value: state.motionDetected ? 'YES' : 'NONE',
+          color: state.motionDetected ? const Color(0xFF0EA5E9) : Colors.blueGrey,
+        )),
+        const SizedBox(width: 10),
+        tile(StatTile(
+          icon: state.isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
           label: 'Light level',
           value: state.isDark ? 'DARK' : 'BRIGHT',
-          icon: Icons.brightness_4,
-          color: state.isDark ? Colors.indigo : Colors.orange,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLightButtons() {
-    return Row(
-      children: [
-        Expanded(
-          child: ElevatedButton(
-            onPressed: () => _sendLightCommand(true),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              backgroundColor: Colors.green,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('TURN ON', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: ElevatedButton(
-            onPressed: () => _sendLightCommand(false),
-            style: ElevatedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 18),
-              backgroundColor: Colors.grey.shade800,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('TURN OFF', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-          ),
-        ),
+          color: state.isDark ? const Color(0xFF6366F1) : _amber,
+        )),
       ],
     );
   }
 
   Widget _buildVoiceButton() {
+    final colors = !_voiceReady
+        ? [Colors.blueGrey.shade400, Colors.blueGrey.shade600]
+        : _listening
+            ? [const Color(0xFFEF4444), const Color(0xFFB91C1C)]
+            : [const Color(0xFF6366F1), const Color(0xFF4338CA)];
     return GestureDetector(
       onTapDown: (_) => _onVoiceStart(),
       onTapUp: (_) => _onVoiceStop(),
       onTapCancel: () => _onVoiceStop(),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 18),
         decoration: BoxDecoration(
-          color: _listening ? Colors.red.shade600 : Colors.blue.shade700,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: _listening ? Colors.red.shade900 : Colors.blue.shade900),
+          gradient: LinearGradient(colors: colors),
+          borderRadius: BorderRadius.circular(22),
         ),
-        child: Column(
+        child: Row(
           children: [
-            Icon(_listening ? Icons.mic : Icons.mic_none, color: Colors.white, size: 32),
-            const SizedBox(height: 4),
-            Text(
-              _voiceReady
-                  ? (_listening ? 'Listening...' : 'Hold to speak')
-                  : 'Voice unavailable (check mic permission)',
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            Container(
+              width: 46,
+              height: 46,
+              decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle),
+              child: Icon(_listening ? Icons.mic_rounded : Icons.mic_none_rounded, color: Colors.white, size: 26),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _voiceReady ? (_listening ? 'Listening...' : 'Hold to speak') : 'Voice unavailable',
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800),
+                  ),
+                  Text(
+                    _voiceReady ? 'Say "turn on the light" or "turn off the light"' : 'Check the microphone permission',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -320,16 +368,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildAutonomyBanner(DeviceState state) {
     final status = state.agentStatus;
-    final requestedAutonomyNotReady =
-        state.mode == OperatingMode.autonomous && !status.isAutonomousReady;
+    final requestedAutonomyNotReady = state.mode == OperatingMode.autonomous && !status.isAutonomousReady;
 
     Color color;
+    IconData icon;
     if (requestedAutonomyNotReady) {
-      color = Colors.red;
+      color = _red;
+      icon = Icons.front_hand_rounded;
     } else if (status.isAutonomousReady) {
-      color = Colors.green;
+      color = _green;
+      icon = Icons.verified_rounded;
     } else {
-      color = Colors.amber.shade800;
+      color = _amber;
+      icon = Icons.school_rounded;
     }
 
     String headline;
@@ -341,29 +392,57 @@ class _HomeScreenState extends State<HomeScreen> {
       headline =
           '${status.stateName} · ${status.proposals}/100 proposals · ${status.approvalRate.toStringAsFixed(0)}% approved';
     } else {
-      headline =
-          '${status.stateName} · ${status.approvalRate.toStringAsFixed(0)}% approved overall';
+      headline = '${status.stateName} · ${status.approvalRate.toStringAsFixed(0)}% approved overall';
     }
 
     return Card(
-      color: color.withValues(alpha: 0.1),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              headline,
-              style: TextStyle(color: color, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              status.lastChange,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        leading: IconBubble(icon, color),
+        title: Text(headline, style: TextStyle(color: color, fontWeight: FontWeight.w700)),
+        subtitle: Text(status.lastChange),
       ),
+    );
+  }
+
+  Widget _buildConnectionTile(MqttService mqtt, DeviceState state) {
+    final since = _lastConnectedChangeAt;
+    final sinceText = since == null ? '' : DateFormat.Hms().format(since);
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      leading: IconBubble(
+        state.connected ? Icons.wifi_rounded : Icons.wifi_off_rounded,
+        state.connected ? _green : _red,
+      ),
+      title: Text(state.connected ? 'Connected' : 'Disconnected', style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(
+        !mqtt.brokerConfigured
+            ? 'Tap to enter your laptop address'
+            : 'Laptop ${mqtt.brokerIp}'
+                '${mqtt.resolvedIp == null ? '' : ' (${mqtt.resolvedIp})'}'
+                '${sinceText.isEmpty ? '' : ' · since $sinceText'}',
+      ),
+      trailing: const Icon(Icons.edit_rounded, size: 18),
+      onTap: () => _editBroker(mqtt),
+    );
+  }
+
+  Widget _buildWifiTile(MqttService mqtt) {
+    final reason = mqtt.wifiSwitchReason;
+    final showReason = mqtt.wifiSwitchState == 'REVERTED' ||
+        mqtt.wifiSwitchState == 'REJECTED' ||
+        mqtt.wifiSwitchState == 'CONNECTING';
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      leading: const IconBubble(Icons.router_rounded, Color(0xFF0EA5E9)),
+      title: Text('Wi-Fi: ${mqtt.wifiSsid ?? 'unknown'}', style: const TextStyle(fontWeight: FontWeight.w700)),
+      subtitle: Text(
+        showReason && reason.isNotEmpty
+            ? '${mqtt.wifiSwitchState}: $reason'
+            : (mqtt.wifiIp == null ? 'Tap to choose another network' : 'IP ${mqtt.wifiIp} · tap to change'),
+      ),
+      trailing: const Icon(Icons.chevron_right_rounded),
+      onTap: () => WifiSheet.show(context),
     );
   }
 }

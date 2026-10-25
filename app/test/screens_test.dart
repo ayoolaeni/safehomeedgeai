@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:safehome_edge_ai/screens/activity_screen.dart';
+import 'package:safehome_edge_ai/screens/home_screen.dart';
 import 'package:safehome_edge_ai/screens/overview_screen.dart';
 import 'package:safehome_edge_ai/screens/rooms_screen.dart';
 import 'package:safehome_edge_ai/screens/twins_screen.dart';
@@ -84,6 +85,19 @@ void main() {
       expect(tester.takeException(), isNull, reason: code);
       expect(find.text('THRIFTOGENTIC AI PRINCIPLES'), findsOneWidget, reason: code);
     }
+  });
+
+  testWidgets('ESP32 lamp page renders and its buttons work', (tester) async {
+    await pumpScreen(tester, const HomeScreen());
+    expect(tester.takeException(), isNull);
+    expect(find.text('The lamp is off'), findsOneWidget);
+    expect(find.text('Turn on'), findsOneWidget);
+    expect(find.text('Turn off'), findsOneWidget);
+    expect(find.text('Manual'), findsOneWidget);
+    await tester.tap(find.text('Turn on'));
+    await tester.pump();
+    expect(find.text('Command sent: turn light ON'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('Activity tab shows the verified audit chain', (tester) async {

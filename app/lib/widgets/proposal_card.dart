@@ -63,52 +63,71 @@ class _ProposalCardState extends State<ProposalCard> {
     final proposal = widget.proposal;
     final isHigh = proposal.isHighConfidence;
 
+    final scheme = Theme.of(context).colorScheme;
+    const amber = Color(0xFFF59E0B);
+    final confColor = isHigh ? const Color(0xFF059669) : const Color(0xFFDC2626);
     return Card(
-      color: Colors.amber.shade50,
+      color: scheme.tertiaryContainer.withValues(alpha: 0.35),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
-                const Icon(Icons.help_outline, color: Colors.orange),
-                const SizedBox(width: 8),
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                      color: amber.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.lightbulb_rounded, color: amber, size: 20),
+                ),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Proposal: ${proposal.action.replaceAll('_', ' ')}',
-                    style: Theme.of(context).textTheme.titleMedium,
+                    'Lamp proposes: ${proposal.action.replaceAll('_', ' ').toLowerCase()}',
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
                   ),
                 ),
-                Chip(
-                  label: Text(proposal.confidence),
-                  backgroundColor: isHigh ? Colors.green.shade100 : Colors.red.shade100,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                      color: confColor.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(20)),
+                  child: Text(proposal.confidence,
+                      style: TextStyle(fontSize: 10, color: confColor, fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(proposal.reason),
-            const SizedBox(height: 4),
-            Text(
-              'Expires in ${_remaining}s',
-              style: Theme.of(context).textTheme.bodySmall,
+            const SizedBox(height: 8),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: _remaining / ProposalCard.timeoutSeconds,
+                minHeight: 4,
+                color: amber,
+                backgroundColor: amber.withValues(alpha: 0.15),
+              ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 4),
+            Text('Expires in ${_remaining}s', style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 10),
             Row(
               children: [
                 Expanded(
-                  child: ElevatedButton(
+                  child: FilledButton.icon(
                     onPressed: widget.onApprove,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                    child: const Text('APPROVE'),
+                    icon: const Icon(Icons.check_rounded),
+                    label: const Text('Approve'),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: ElevatedButton(
+                  child: OutlinedButton.icon(
                     onPressed: widget.onDecline,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    child: const Text('DECLINE'),
+                    icon: const Icon(Icons.close_rounded),
+                    label: const Text('Decline'),
                   ),
                 ),
               ],

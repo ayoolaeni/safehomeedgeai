@@ -60,30 +60,35 @@ class _LogRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final color = _typeColor();
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 64,
-            child: Text(
-              _formatTime(),
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-          SizedBox(
-            width: 84,
-            child: Text(
-              entry.type,
-              style: Theme.of(context)
-                  .textTheme
-                  .bodySmall
-                  ?.copyWith(color: _typeColor(), fontWeight: FontWeight.bold),
-            ),
+          Container(
+            margin: const EdgeInsets.only(top: 5, right: 10),
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
           ),
           Expanded(
-            child: Text(entry.detail, style: Theme.of(context).textTheme.bodySmall),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text(entry.type,
+                      style: Theme.of(context)
+                          .textTheme
+                          .labelMedium
+                          ?.copyWith(color: color, fontWeight: FontWeight.w800)),
+                  const Spacer(),
+                  Text(_formatTime(), style: Theme.of(context).textTheme.labelSmall),
+                ]),
+                const SizedBox(height: 2),
+                Text(entry.detail, style: Theme.of(context).textTheme.bodySmall),
+              ],
+            ),
           ),
         ],
       ),
